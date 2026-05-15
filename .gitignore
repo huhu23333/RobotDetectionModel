@@ -1,0 +1,5 @@
+build/
+armor_detection
+.continue/
+Model/0526.xml
+Model/0526.bin

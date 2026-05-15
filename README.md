@@ -1,3 +1,44 @@
+# 基于深圳大学RobotPilots战队开源的装甲板识别模型的海康相机可视化程序
+
+*闭门造车搞了一年传统视觉还不如人yolo快和准o(╥﹏╥)o*
+
+需要安装MVS及OpenVino
+
+MVS下载链接：https://www.hikrobotics.com/cn/machinevision/service/download/
+
+OpenVino参考原README.md安装（已附在下方）
+
+实测非nuc设备可跳过`激活nuc上的gpu`步骤，可参考下方链接安装Intel GPU驱动（核显可用，测试设备Intel Ultra5 125H）：
+
+```
+https://www.intel.cn/content/www/cn/zh/support/articles/000005520/graphics.html
+https://dgpu-docs.intel.com/driver/client/overview.html#ubuntu-22.04
+```
+
+或直接运行如下命令（ubuntu2204）
+
+```
+wget -qO - https://repositories.intel.com/gpu/intel-graphics.key | \
+  sudo gpg --yes --dearmor --output /usr/share/keyrings/intel-graphics.gpg
+echo "deb [arch=amd64,i386 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ubuntu jammy unified" | \
+  sudo tee /etc/apt/sources.list.d/intel-gpu-jammy.list
+sudo apt update
+sudo apt-get install -y libze-intel-gpu1 libze1 intel-opencl-icd clinfo
+sudo apt-get install -y libze-dev intel-ocloc
+```
+
+使用build.bash编译，自动在主目录下生成armor_detection可执行文件
+
+`./armor_detection --help`显示可选参数
+
+使用示例
+
+```
+./armor_detection --device GPU --gige-ip 192.168.10.10 --pc-ip 192.168.10.25
+```
+
+以下为原README.md内容
+
 # RP24-DetectionModel
 
 **RobotPilots视觉自瞄网络模型**
