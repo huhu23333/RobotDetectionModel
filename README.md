@@ -2,6 +2,8 @@
 
 *闭门造车搞了一年传统视觉还不如人yolo快和准o(╥﹏╥)o*
 
+*不对，正视好像还是传统视觉准（）*
+
 需要安装MVS及OpenVino
 
 MVS下载链接：https://www.hikrobotics.com/cn/machinevision/service/download/
