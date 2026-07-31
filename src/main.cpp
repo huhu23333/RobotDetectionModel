@@ -571,9 +571,10 @@ int main(int argc, char** argv) {
                     continue;
                 }
 
+                double infer_time_ms;
 // while (true)
 // {
-                double infer_time_ms = inferSingleImage(infer, img, detect_color, device_name);
+                infer_time_ms = inferSingleImage(infer, img, detect_color, device_name);
 
 //     cout << "fps: " << 1000.0/infer_time_ms << endl;
 // }
