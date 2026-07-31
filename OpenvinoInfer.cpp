@@ -17,7 +17,7 @@ OpenvinoInfer::OpenvinoInfer(string model_path_xml, string model_path_bin, strin
     // Embed above steps in the graph
     model = ppp->build();
 
-    compiled_model = core.compile_model(model, device);
+    compiled_model = core.compile_model(model, device, ov::hint::performance_mode(ov::hint::PerformanceMode::THROUGHPUT));
 }
 
 void OpenvinoInfer::infer(Mat img, int detect_color){

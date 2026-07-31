@@ -61,7 +61,7 @@ public:
         // Embed above steps in the graph
         model = ppp->build();
 
-        compiled_model = core.compile_model(model, device);
+        compiled_model = core.compile_model(model, device, ov::hint::performance_mode(ov::hint::PerformanceMode::THROUGHPUT));
     }
 
     void infer(Mat img, float* detections){

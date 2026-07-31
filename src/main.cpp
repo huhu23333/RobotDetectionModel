@@ -451,6 +451,7 @@ bool processCameraFrame(unsigned char* pData, MV_FRAME_OUT_INFO_EX& stImageInfo,
 // ============================================================
 // 主函数
 // ============================================================
+//#define FPS_TEST
 int main(int argc, char** argv) {
     // 注册信号处理
     signal(SIGINT, signalHandler);
@@ -497,6 +498,9 @@ int main(int argc, char** argv) {
             return 0;
         }
     }
+#ifdef FPS_TEST
+use_image_interactive = true;
+#endif
 
     cout << "==========================================" << endl;
     cout << "   Armor Detection with OpenVINO" << endl;
@@ -558,11 +562,16 @@ int main(int argc, char** argv) {
             string input_path;
             cout << "\nEnter image path (type 'q' to quit):" << endl;
             while (!g_bExit) {
+#ifdef FPS_TEST
+input_path = "/home/huhu233/rm2026/transistor_rm2026_algorithm_visual_ws/camera_images/00040.jpg";
+#else
                 cout << "> ";
                 getline(cin, input_path);
                 if (input_path.empty()) continue;
 
                 input_path = stripQuotes(input_path);
+#endif
+
                 if (input_path == "q" || input_path == "Q" || input_path == "quit") break;
 
                 cv::Mat img = cv::imread(input_path);
@@ -572,12 +581,16 @@ int main(int argc, char** argv) {
                 }
 
                 double infer_time_ms;
-// while (true)
-// {
+#ifdef FPS_TEST
+while (true)
+{
+#endif
                 infer_time_ms = inferSingleImage(infer, img, detect_color, device_name);
 
-//     cout << "fps: " << 1000.0/infer_time_ms << endl;
-// }
+#ifdef FPS_TEST
+    cout << "fps: " << 1000.0/infer_time_ms << endl;
+}
+#endif
 
                 cout << "Inference: " << infer_time_ms << " ms | "
                     << "Objects: " << infer.tmp_objects.size() << endl;
