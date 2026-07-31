@@ -87,6 +87,89 @@ static const cv::Scalar COLOR_GRAY  = cv::Scalar(200, 200, 200);
 // 包含：检测框(颜色按队伍)、置信度、分类标签、4个关键点编号、装甲板尺寸
 // 参考 OpenvinoInfer::infer() 中的 Object 结构
 // ============================================================
+// ============================================================
+// 去除字符串首尾的引号、空格和换行符
+// ============================================================
+// 前向声明
+void drawDetectionResults(cv::Mat& image, const vector<Object>& objects);
+
+static string stripQuotes(const string& s) {
+    if (s.empty()) return s;
+    string temp = s;
+    while (!temp.empty() && (temp.front() == '\'' || temp.front() == ' ' || temp.front() == '"' || temp.front() == '\n')) {
+        temp = temp.substr(1);
+    }
+    while (!temp.empty() && (temp.back() == '\'' || temp.back() == ' ' || temp.back() == '"' || temp.back() == '\n')) {
+        temp.pop_back();
+    }
+    return temp;
+}
+
+// ============================================================
+// 单张图像推理 + 绘制 + 显示
+// 返回推理耗时（毫秒）
+// ============================================================
+static double inferSingleImage(OpenvinoInfer& infer, const cv::Mat& img, int detect_color, const string& device_name) {
+    if (img.empty()) return 0.0;
+
+    // 缩放到 640x640 进行推理
+    cv::Mat infer_frame;
+    cv::resize(img, infer_frame, cv::Size(640, 640));
+
+    // detect_color -> infer_color 映射
+    int infer_color;
+    if (detect_color == -1)       infer_color = 2;
+    else if (detect_color == 0)   infer_color = 1;
+    else                          infer_color = 0;
+
+    auto infer_start = chrono::steady_clock::now();
+    infer.infer(infer_frame, infer_color);
+    auto infer_end   = chrono::steady_clock::now();
+    double infer_time_ms = chrono::duration_cast<chrono::microseconds>(infer_end - infer_start).count() / 1000.0;
+
+    // 坐标映射：640 -> 原图
+    float scale_x = (float)img.cols / 640.0f;
+    float scale_y = (float)img.rows / 640.0f;
+    int img_w = img.cols, img_h = img.rows;
+    vector<Object> display_objects = infer.tmp_objects;
+    for (auto& obj : display_objects) {
+        obj.rect.x      = (int)(obj.rect.x * scale_x);
+        obj.rect.y      = (int)(obj.rect.y * scale_y);
+        obj.rect.width  = (int)(obj.rect.width  * scale_x);
+        obj.rect.height = (int)(obj.rect.height * scale_y);
+        for (int i = 0; i < 8; i += 2) {
+            obj.landmarks[i]   *= scale_x;
+            obj.landmarks[i+1] *= scale_y;
+        }
+        obj.length *= scale_x;
+        obj.width  *= scale_y;
+
+        obj.rect.x = std::max(0.0f, obj.rect.x);
+        obj.rect.y = std::max(0.0f, obj.rect.y);
+        obj.rect.width  = std::min(obj.rect.width,  img_w - obj.rect.x);
+        obj.rect.height = std::min(obj.rect.height, img_h - obj.rect.y);
+    }
+
+    // 绘制
+    cv::Mat display = img.clone();
+    drawDetectionResults(display, display_objects);
+
+    // 信息文字
+    string info_text = cv::format("Inference: %.1f ms | Objects: %zu | Device: %s",
+                                  infer_time_ms, infer.tmp_objects.size(), device_name.c_str());
+    cv::putText(display, info_text, cv::Point(10, 30),
+                cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
+
+    string color_text = cv::format("Detect: %s | Resolution: %dx%d",
+                                   detect_color == -1 ? "BOTH" : (detect_color == 0 ? "RED" : "BLUE"),
+                                   img.cols, img.rows);
+    cv::putText(display, color_text, cv::Point(10, 60),
+                cv::FONT_HERSHEY_SIMPLEX, 0.6, cv::Scalar(0, 255, 0), 2);
+
+    cv::imshow("Armor Detection", display);
+    return infer_time_ms;
+}
+
 void drawDetectionResults(cv::Mat& image, const vector<Object>& objects) {
     // -------- 图例：显示颜色对应关系 --------
     cv::rectangle(image, cv::Rect(10, 120, 12, 12), COLOR_RED, -1);
@@ -375,10 +458,12 @@ int main(int argc, char** argv) {
     // -------------------- 解析命令行参数 --------------------
     string model_path   = "Model/0526.onnx";
     string device_name  = "CPU";
-    int    detect_color = -1;   // -1: 自动（红蓝都检测）, 0: 只检测红色, 1: 只检测蓝色
-    int    camera_index = 0;    // USB 相机索引（仅 USB 模式）
-    string cam_ip       = "";   // GigE 相机 IP
-    string pc_ip        = "";   // 本机 IP
+    int    detect_color       = -1;   // -1: 自动（红蓝都检测）, 0: 只检测红色, 1: 只检测蓝色
+    int    camera_index       = 0;    // USB 相机索引（仅 USB 模式）
+    string cam_ip             = "";   // GigE 相机 IP
+    string pc_ip              = "";   // 本机 IP
+    string image_path         = "";   // 单张图片路径（图片输入模式）
+    bool   use_image_interactive = false;  // 交互式图片输入模式
 
     for (int i = 1; i < argc; i++) {
         string arg = argv[i];
@@ -394,15 +479,21 @@ int main(int argc, char** argv) {
             cam_ip = argv[++i];
         else if (arg == "--pc-ip" && i + 1 < argc)
             pc_ip = argv[++i];
+        else if (arg == "--image" && i + 1 < argc)
+            image_path = argv[++i];
+        else if (arg == "--image-interactive")
+            use_image_interactive = true;
         else if (arg == "--help") {
             cout << "Usage: armor_detection [options]\n"
-                 << "  --model <path>      ONNX model path (default: Model/0526.onnx)\n"
-                 << "  --device <name>     OpenVINO device: CPU, GPU, AUTO (default: CPU)\n"
-                 << "  --color <0|1>       Detect color: 0=RED, 1=BLUE, -1=BOTH (default: -1)\n"
-                 << "  --usb <index>       USB camera index (default: 0)\n"
-                 << "  --gige-ip <ip>      GigE camera IP (e.g., 192.168.1.100)\n"
-                 << "  --pc-ip <ip>        PC IP for GigE (e.g., 192.168.1.10)\n"
-                 << "  --help              Show this help\n";
+                 << "  --model <path>       ONNX model path (default: Model/0526.onnx)\n"
+                 << "  --device <name>      OpenVINO device: CPU, GPU, AUTO (default: CPU)\n"
+                 << "  --color <0|1>        Detect color: 0=RED, 1=BLUE, -1=BOTH (default: -1)\n"
+                 << "  --usb <index>        USB camera index (default: 0)\n"
+                 << "  --gige-ip <ip>       GigE camera IP (e.g., 192.168.1.100)\n"
+                 << "  --pc-ip <ip>         PC IP for GigE (e.g., 192.168.1.10)\n"
+                 << "  --image <path>       Single image inference mode\n"
+                 << "  --image-interactive  Interactive image input mode\n"
+                 << "  --help               Show this help\n";
             return 0;
         }
     }
@@ -453,6 +544,75 @@ int main(int argc, char** argv) {
     // （参考 OpenvinoInfer.cpp 中的实现：BGR输入 -> RGB -> 归一化 -> NCHW）
     OpenvinoInfer infer(xml_path_str, bin_path_str, device_name);
     cout << "[INFO] Inference model loaded successfully!" << endl;
+
+    // ==================== 图片输入模式分支 ====================
+    bool use_image_mode = use_image_interactive || !image_path.empty();
+
+    if (use_image_mode) {
+        cout << "========================================" << endl;
+        cout << "   Image Inference Mode" << endl;
+        cout << "========================================" << endl;
+
+        if (use_image_interactive) {
+            // 交互式图片输入模式（模仿 YoloPose_OpenVINO 的交互循环）
+            string input_path;
+            cout << "\nEnter image path (type 'q' to quit):" << endl;
+            while (!g_bExit) {
+                cout << "> ";
+                getline(cin, input_path);
+                if (input_path.empty()) continue;
+
+                input_path = stripQuotes(input_path);
+                if (input_path == "q" || input_path == "Q" || input_path == "quit") break;
+
+                cv::Mat img = cv::imread(input_path);
+                if (img.empty()) {
+                    cerr << "[ERROR] Failed to read image: " << input_path << endl;
+                    continue;
+                }
+
+// while (true)
+// {
+                double infer_time_ms = inferSingleImage(infer, img, detect_color, device_name);
+
+//     cout << "fps: " << 1000.0/infer_time_ms << endl;
+// }
+
+                cout << "Inference: " << infer_time_ms << " ms | "
+                    << "Objects: " << infer.tmp_objects.size() << endl;
+                cout << "Press 'n' for next image, 'q' to quit." << endl;
+
+                int key = cv::waitKey(0);
+                if (key == 'n' || key == 'N') {
+                    continue;
+                } else if (key == 'q' || key == 'Q' || key == 27) {
+                    break;
+                }
+            }
+        } else {
+            // 单张图片推理模式
+            cv::Mat img = cv::imread(image_path);
+            if (img.empty()) {
+                cerr << "[ERROR] Failed to read image: " << image_path << endl;
+                return -1;
+            }
+
+            double infer_time_ms = inferSingleImage(infer, img, detect_color, device_name);
+
+            cout << "Image: " << image_path << endl;
+            cout << "Inference: " << infer_time_ms << " ms" << endl;
+            cout << "Objects: " << infer.tmp_objects.size() << endl;
+            cout << "Press any key to exit..." << endl;
+
+            cv::waitKey(0);
+        }
+
+        cv::destroyAllWindows();
+        cout << "[INFO] Image mode exit." << endl;
+        return 0;
+    }
+
+    // ==================== 相机模式 ====================
 
     // -------------------- Step 3: 初始化海康相机（参考 auto_aim 的 Camera 类）--------------------
     void* handle = nullptr;
