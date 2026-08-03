@@ -10,7 +10,7 @@ MVS下载链接：https://www.hikrobotics.com/cn/machinevision/service/download/
 
 OpenVino参考原README.md安装（已附在下方）
 
-实测非nuc设备可跳过`激活nuc上的gpu`步骤，可参考下方链接安装Intel GPU驱动（核显可用，测试设备Intel Ultra5 125H）：
+实测非nuc设备可跳过`激活nuc上的gpu`步骤，可参考下方链接安装Intel GPU驱动（核显可用，测试设备Intel Ultra5 125H）(注：AMD GPU貌似也能在安装Intel GPU驱动后使用opencl在openvino框架下加速推理，设备名同为GPU)：
 
 ```
 https://www.intel.cn/content/www/cn/zh/support/articles/000005520/graphics.html
