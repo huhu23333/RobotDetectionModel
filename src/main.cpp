@@ -451,7 +451,6 @@ bool processCameraFrame(unsigned char* pData, MV_FRAME_OUT_INFO_EX& stImageInfo,
 // ============================================================
 // 主函数
 // ============================================================
-//#define FPS_TEST
 int main(int argc, char** argv) {
     // 注册信号处理
     signal(SIGINT, signalHandler);
@@ -465,6 +464,7 @@ int main(int argc, char** argv) {
     string pc_ip              = "";   // 本机 IP
     string image_path         = "";   // 单张图片路径（图片输入模式）
     bool   use_image_interactive = false;  // 交互式图片输入模式
+    bool   fps_test_mode = false;
 
     for (int i = 1; i < argc; i++) {
         string arg = argv[i];
@@ -484,6 +484,8 @@ int main(int argc, char** argv) {
             image_path = argv[++i];
         else if (arg == "--image-interactive")
             use_image_interactive = true;
+        else if (arg == "--fps-test")
+            fps_test_mode = true;
         else if (arg == "--help") {
             cout << "Usage: armor_detection [options]\n"
                  << "  --model <path>       ONNX model path (default: Model/0526.onnx)\n"
@@ -494,13 +496,14 @@ int main(int argc, char** argv) {
                  << "  --pc-ip <ip>         PC IP for GigE (e.g., 192.168.1.10)\n"
                  << "  --image <path>       Single image inference mode\n"
                  << "  --image-interactive  Interactive image input mode\n"
+                 << "  --fps-test           Fps Test mode\n"
                  << "  --help               Show this help\n";
             return 0;
         }
     }
-#ifdef FPS_TEST
-use_image_interactive = true;
-#endif
+    if (fps_test_mode) {
+        use_image_interactive = true;
+    }
 
     cout << "==========================================" << endl;
     cout << "   Armor Detection with OpenVINO" << endl;
@@ -562,15 +565,14 @@ use_image_interactive = true;
             string input_path;
             cout << "\nEnter image path (type 'q' to quit):" << endl;
             while (!g_bExit) {
-#ifdef FPS_TEST
-input_path = "/home/huhu233/rm2026/transistor_rm2026_algorithm_visual_ws/camera_images/00040.jpg";
-#else
-                cout << "> ";
-                getline(cin, input_path);
-                if (input_path.empty()) continue;
-
-                input_path = stripQuotes(input_path);
-#endif
+                if (fps_test_mode) {
+                    input_path = "./test_images/00040.jpg";
+                } else {
+                    cout << "> ";
+                    getline(cin, input_path);
+                    if (input_path.empty()) continue;
+                    input_path = stripQuotes(input_path);
+                }
 
                 if (input_path == "q" || input_path == "Q" || input_path == "quit") break;
 
@@ -581,16 +583,16 @@ input_path = "/home/huhu233/rm2026/transistor_rm2026_algorithm_visual_ws/camera_
                 }
 
                 double infer_time_ms;
-#ifdef FPS_TEST
-while (true)
-{
-#endif
-                infer_time_ms = inferSingleImage(infer, img, detect_color, device_name);
 
-#ifdef FPS_TEST
-    cout << "fps: " << 1000.0/infer_time_ms << endl;
-}
-#endif
+                if (fps_test_mode) {
+                    while (!g_bExit) {
+                        infer_time_ms = inferSingleImage(infer, img, detect_color, device_name);
+                        cout << "fps: " << 1000.0/infer_time_ms << endl;
+                    }
+                    exit(0);
+                } else {
+                    infer_time_ms = inferSingleImage(infer, img, detect_color, device_name);
+                }
 
                 cout << "Inference: " << infer_time_ms << " ms | "
                     << "Objects: " << infer.tmp_objects.size() << endl;
